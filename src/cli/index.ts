@@ -44,23 +44,38 @@ export function startInteractiveCLI(): void {
         
         await executeCommand(line, (text) => {
           // Format output for telnet by replacing newlines with CRLF
-          socket.write(text.replace(/\n/g, '\r\n') + '\r\n');
+          if (socket.writable) {
+            socket.write(text.replace(/\n/g, '\r\n') + '\r\n');
+          }
         });
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error);
-        socket.write(`Error: ${errorMessage}\r\n`);
+        if (socket.writable) {
+          socket.write(`Error: ${errorMessage}\r\n`);
+        }
       }
-      rl.prompt();
+      if (!socket.destroyed) {
+        rl.prompt();
+      }
+    });
+
+    // Handle readline errors
+    rl.on('error', (err) => {
+      log(`CLI readline error: ${err.message}`);
+      rl.close();
+      socket.destroy();
     });
     
     // Handle client disconnect
     socket.on('end', () => {
       log(`CLI client disconnected from ${socket.remoteAddress}:${socket.remotePort}`);
+      rl.close();
     });
     
     // Handle errors
     socket.on('error', (err) => {
       log(`CLI socket error: ${err.message}`);
+      rl.close();
     });
   });
   
